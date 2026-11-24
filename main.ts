@@ -1,26 +1,40 @@
-// A working post-x-promote-make-your-own-bounty-01 entry (Node 22, standard library only): it copies POST.json from the
-// repository root to /output/POST.json, where the gate reads it. That is all the program has to do. The entry is the
-// post itself: one post of your own on X that quotes make.fun's make-your-own-bounty post
-// (https://x.com/makefunai/status/2124915864336236646) or links to it, a photo of its own attached, make.fun or the
-// @makefunai tag and your play code in its text; POST.json names the post, and the house reads its replies, reposts and
-// quotes from X. Nothing this program writes about the post is scored.
+// Entry for post-x-promote-make-your-own-bounty-01, Node 22, standard library only.
 //
-// The POST.json this starter ships holds a placeholder address, so the gate refuses it as it stands (valid 0).
-// Replace it with your post's address before you submit.
-//
-// Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR stand in for /bot and /output:
-//   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
+// The entry is the X post itself. This program does one small job for the grader:
+// it takes POST.json (the post's address) from the repository and places an exact
+// copy at /output/POST.json. Before copying it checks the file is valid JSON and
+// that its url really points at an X post, so a broken POST.json fails here with a
+// clear message instead of handing the grader something it cannot use.
 
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
-const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoDir = process.env.MAKEFUN_BOT_DIR ?? '/bot';
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-mkdirSync(OUTPUT_DIR, { recursive: true });
+const text = readFileSync(join(repoDir, 'POST.json'), 'utf8');
+
+let data: unknown;
 try {
-  copyFileSync(join(BOT_DIR, 'POST.json'), join(OUTPUT_DIR, 'POST.json'));
-} catch (err) {
-  console.error(`POST.json could not be copied from ${BOT_DIR}: ${(err as Error).message}`);
+  data = JSON.parse(text);
+} catch {
+  console.error('POST.json is not valid JSON');
+  process.exit(1);
+}
+
+const url = (data as { url?: unknown } | null)?.url;
+if (typeof url !== 'string' || !/^https:\/\/(x\.com|twitter\.com)\/[^/]+\/status\/\d+$/.test(url)) {
+  console.error('POST.json must name an X post address in its "url" field');
+  process.exit(1);
+}
+
+mkdirSync(outDir, { recursive: true });
+writeFileSync(join(outDir, 'POST.json'), text);
+
+// Read the copy back and compare it with the source, so a partial or failed
+// write is caught here instead of reaching the grader as a broken hand-in.
+const copied = readFileSync(join(outDir, 'POST.json'), 'utf8');
+if (copied !== text) {
+  console.error('the copy of POST.json does not match the source');
   process.exit(1);
 }
